@@ -25,7 +25,11 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#ifdef ENABLE_RASPI2
+#define TIMER_CLO		0x3f003004
+#else
 #define TIMER_CLO		0x20003004
+#endif
 
 int usleep(useconds_t usec)
 {

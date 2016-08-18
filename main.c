@@ -161,8 +161,7 @@ void kernel_main(uint32_t boot_dev, uint32_t arm_m_type, uint32_t atags)
 	}
 	else
 	{
-		puts("Error setting up framebuffer:");
-		puthex(result);
+		printf("Error setting up framebuffer: 0x%x\n", result);
 	}
 #endif
 

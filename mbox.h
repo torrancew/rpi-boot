@@ -24,7 +24,11 @@
 
 #include <stdint.h>
 
+#ifdef ENABLE_RASPI2
+#define MBOX_BASE 0x3f00b880
+#else
 #define MBOX_BASE 0x2000b880
+#endif
 
 #define MBOX_PEEK 0x10
 #define MBOX_READ 0x00

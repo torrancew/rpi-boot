@@ -79,7 +79,7 @@
 // The particular SDHCI implementation
 #define SDHCI_IMPLEMENTATION_GENERIC        0
 #define SDHCI_IMPLEMENTATION_BCM_2708       1
-#define SDHCI_IMPLEMENTATION                SDHCI_IMPLEMENTATION_BCM_2708
+#define SDHCI_IMPLEMENTATION                SDHCI_IMPLEMENTATION_GENERIC
 
 static char driver_name[] = "emmc";
 static char device_name[] = "emmc0";	// We use a single device name as there is only
@@ -126,7 +126,12 @@ struct emmc_block_dev
 	uint32_t base_clock;
 };
 
+#ifdef ENABLE_RASPI2
+#define EMMC_BASE		0x3f300000
+#else
 #define EMMC_BASE		0x20300000
+#endif
+
 #define	EMMC_ARG2		0
 #define EMMC_BLKSIZECNT		4
 #define EMMC_ARG1		8
@@ -632,8 +637,11 @@ static int bcm_2708_power_cycle()
 // Set the clock dividers to generate a target value
 static uint32_t sd_get_clock_divider(uint32_t base_clock, uint32_t target_rate)
 {
+    // HCI versions 1-2 require power-of-two-dividers
+    // HCI versoin 3 supports power-of-two dividers or preset values
     // TODO: implement use of preset value registers
 
+    uint32_t ret;
     uint32_t targetted_divisor = 0;
     if(target_rate > base_clock)
         targetted_divisor = 1;
@@ -645,59 +653,50 @@ static uint32_t sd_get_clock_divider(uint32_t base_clock, uint32_t target_rate)
             targetted_divisor--;
     }
 
-    // Decide on the clock mode to use
+    int divisor = -1;
+    for(int first_bit = 31; first_bit >= 0; first_bit--)
+    {
+        uint32_t bit_test = (1 << first_bit);
+        if(targetted_divisor & bit_test)
+        {
+            divisor = first_bit;
+            targetted_divisor &= ~bit_test;
+            if(targetted_divisor)
+            {
+                // The divisor is not a power-of-two, increase it
+                divisor++;
+            }
+            break;
+        }
+    }
 
-    // Currently only 10-bit divided clock mode is supported
+    // Find the first bit set
+    if(divisor == -1)
+        divisor = 31;
+    if(divisor >= 32)
+        divisor = 31;
 
-    if(hci_ver >= 2)
+    if(divisor != 0)
+        divisor = (1 << (divisor - 1));
+
+    uint32_t freq_select = divisor & 0xff;
+
+    if (hci_ver <= 1)
+    {
+        // HCI versions 1 & 2 support 8-bit divided clock mode
+        if(divisor > 0x80)
+            divisor = 0x80;
+
+        ret = (freq_select << 8);
+    }
+    else if(hci_ver >= 2)
     {
         // HCI version 3 or greater supports 10-bit divided clock mode
-        // This requires a power-of-two divider
-
-        // Find the first bit set
-        int divisor = -1;
-        for(int first_bit = 31; first_bit >= 0; first_bit--)
-        {
-            uint32_t bit_test = (1 << first_bit);
-            if(targetted_divisor & bit_test)
-            {
-                divisor = first_bit;
-                targetted_divisor &= ~bit_test;
-                if(targetted_divisor)
-                {
-                    // The divisor is not a power-of-two, increase it
-                    divisor++;
-                }
-                break;
-            }
-        }
-
-        if(divisor == -1)
-            divisor = 31;
-        if(divisor >= 32)
-            divisor = 31;
-
-        if(divisor != 0)
-            divisor = (1 << (divisor - 1));
-
         if(divisor >= 0x400)
             divisor = 0x3ff;
 
-        uint32_t freq_select = divisor & 0xff;
         uint32_t upper_bits = (divisor >> 8) & 0x3;
-        uint32_t ret = (freq_select << 8) | (upper_bits << 6) | (0 << 5);
-
-#ifdef EMMC_DEBUG
-        int denominator = 1;
-        if(divisor != 0)
-            denominator = divisor * 2;
-        int actual_clock = base_clock / denominator;
-        printf("EMMC: base_clock: %i, target_rate: %i, divisor: %08x, "
-               "actual_clock: %i, ret: %08x\n", base_clock, target_rate,
-               divisor, actual_clock, ret);
-#endif
-
-        return ret;
+        ret = (freq_select << 8) | (upper_bits << 6) | (0 << 5);
     }
     else
     {
@@ -705,6 +704,17 @@ static uint32_t sd_get_clock_divider(uint32_t base_clock, uint32_t target_rate)
         return SD_GET_CLOCK_DIVIDER_FAIL;
     }
 
+#ifdef EMMC_DEBUG
+    int denominator = 1;
+    if(divisor != 0)
+        denominator = divisor * 2;
+    int actual_clock = base_clock / denominator;
+    printf("EMMC: base_clock: %i, target_rate: %i, divisor: %08x, "
+           "actual_clock: %i, ret: %08x\n", base_clock, target_rate,
+           divisor, actual_clock, ret);
+#endif
+
+    return ret;
 }
 
 // Switch the clock rate whilst running
@@ -1307,7 +1317,7 @@ int sd_card_init(struct block_device **dev)
 	printf("EMMC: vendor %x, sdversion %x, slot_status %x\n", vendor, sdversion, slot_status);
 	hci_ver = sdversion;
 
-	if(hci_ver < 2)
+	if(hci_ver > 2)
 	{
 		printf("EMMC: only SDHCI versions >= 3.0 are supported\n");
 		return -1;

@@ -66,7 +66,12 @@ static uint32_t fb_addr, fb_size;
 int fb_init()
 {
 	// define a mailbox buffer
+#ifdef ENABLE_RASPI2
+	uint32_t mb_addr = 0x00007000;
+#else
 	uint32_t mb_addr = 0x40007000;		// 0x7000 in L2 cache coherent mode
+#endif
+
 	volatile uint32_t *mailbuffer = (uint32_t *)mb_addr;
 
 	/* Get the display size */

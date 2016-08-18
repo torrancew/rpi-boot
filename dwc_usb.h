@@ -28,7 +28,11 @@
 #define DWC_USB_FIFO_START		(0x100000 - DWC_USB_FIFO_LEN)
 
 // Register addresses
+#ifdef ENABLE_RASPI2
+#define DWC_USB_BASE			0x3f980000
+#else
 #define DWC_USB_BASE			0x20980000
+#endif
 #define DWC_USB_OTG_CTRL		0
 #define DWC_USB_OTG_IRPT		4
 #define DWC_USB_AHB_CONF		8

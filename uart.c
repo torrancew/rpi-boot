@@ -24,10 +24,18 @@
 #include "uart.h"
 #include "timer.h"
 
+#ifdef ENABLE_RASPI2
+#define GPIO_BASE 			0x3f200000
+#else
 #define GPIO_BASE 			0x20200000
+#endif
 #define GPPUD 				(GPIO_BASE + 0x94)
 #define GPPUDCLK0 			(GPIO_BASE + 0x98)
+#ifdef ENABLE_RASPI2
+#define UART0_BASE			0x3f201000
+#else
 #define UART0_BASE			0x20201000
+#endif
 #define UART0_DR			(UART0_BASE + 0x00)
 #define UART0_RSRECR			(UART0_BASE + 0x04)
 #define UART0_FR			(UART0_BASE + 0x18)
